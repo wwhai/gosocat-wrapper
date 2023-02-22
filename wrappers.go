@@ -21,12 +21,13 @@ type SocatServer struct {
 func NewSocatServer(b, e uint) *SocatServer {
 	PortPool := [1000]uint{0}
 	SocatServer := new(SocatServer)
-	for i := b; i < e-b; i++ {
-		PortPool[i] = uint(i)
+	for i := 0; i < int(e-b); i++ {
+		PortPool[int(i)] = uint(b + uint(i))
 	}
 	SocatServer.PortPool = PortPool
 	SocatServer.portBegin = b
 	SocatServer.portEnd = e
+	SocatServer.socatTunnels = make(map[uint]socatTunnel)
 	return SocatServer
 }
 
@@ -45,7 +46,7 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 	if err != nil {
 		return 0, err
 	}
-	cmdStr := "socat tcp-l:%d,reuseaddr,bind=0.0.0.0,fork tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
+	cmdStr := "tcp-l:%d,reuseaddr,bind=0.0.0.0,fork tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
 	var Port uint = 0
 	for _, port := range server.PortPool {
 		if port != 0 {
@@ -56,7 +57,7 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 	if Port == 0 {
 		return 0, fmt.Errorf("port pool overflow")
 	}
-	shellCmd := exec.CommandContext(ctx, fmt.Sprintf(cmdStr, Port, Port))
+	shellCmd := exec.CommandContext(ctx, "socat", fmt.Sprintf(cmdStr, Port, Port))
 	shellCmd.Stdout = os.Stdout
 	shellCmd.Stderr = os.Stderr
 	server.socatTunnels[Port] = socatTunnel{

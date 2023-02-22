@@ -40,8 +40,8 @@ func (client *SocatClient) StartTunnel(ctx context.Context, cancel context.Cance
 	if err != nil {
 		return err
 	}
-	cmdStr := "socat tcp:%s:%d,forever,intervall=5,fork tcp:localhost:%d"
-	shellCmd := exec.CommandContext(ctx, fmt.Sprintf(cmdStr, client.serverHost, client.remotePort, client.localPort))
+	cmdStr := "tcp:%s:%d,forever,intervall=5,fork tcp:localhost:%d"
+	shellCmd := exec.CommandContext(ctx, "socat", fmt.Sprintf(cmdStr, client.serverHost, client.remotePort, client.localPort))
 	shellCmd.Stdout = os.Stdout
 	shellCmd.Stderr = os.Stderr
 	client.socatTunnel = socatTunnel{
