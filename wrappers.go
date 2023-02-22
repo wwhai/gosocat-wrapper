@@ -46,7 +46,7 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 	if err != nil {
 		return 0, err
 	}
-	cmdStr := "tcp-l:%d,reuseaddr,bind=0.0.0.0,fork tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
+
 	var Port uint = 0
 	for _, port := range server.PortPool {
 		if port != 0 {
@@ -57,7 +57,10 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 	if Port == 0 {
 		return 0, fmt.Errorf("port pool overflow")
 	}
-	shellCmd := exec.CommandContext(ctx, "socat", fmt.Sprintf(cmdStr, Port, Port))
+	// cmdStr := "tcp-l:%d,reuseaddr,bind=0.0.0.0,fork tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
+	c1 := "tcp-l:%d,reuseaddr,bind=0.0.0.0,fork"
+	c2 := "tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
+	shellCmd := exec.CommandContext(ctx, "socat", fmt.Sprintf(c1, Port), fmt.Sprintf(c2, Port))
 	shellCmd.Stdout = os.Stdout
 	shellCmd.Stderr = os.Stderr
 	server.socatTunnels[Port] = socatTunnel{
@@ -83,7 +86,11 @@ func (server *SocatServer) StopTunnel(port uint) error {
 	if server.socatTunnels[port].shellCmd != nil {
 		server.socatTunnels[port].shellCmd.Process.Kill()
 		server.cancel()
-		server.PortPool[port] = 0
+		for i, v := range server.PortPool {
+			if v == port {
+				server.PortPool[i] = 0
+			}
+		}
 		delete(server.socatTunnels, port)
 		return nil
 	}
