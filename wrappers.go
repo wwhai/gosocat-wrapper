@@ -101,7 +101,7 @@ func (server *SocatServer) StopTunnel(port uint) error {
 		server.socatTunnels[ListenPort].shellCmd.Process.Signal(os.Kill)
 		server.cancel()
 		for i, v := range server.PortPool {
-			if v == port {
+			if v == ListenPort {
 				server.PortPool[i] = 0
 				break
 			}
