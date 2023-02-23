@@ -3,9 +3,12 @@ package socatwrapper
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
+
+	"log"
 )
 
 type SocatServer struct {
@@ -16,6 +19,8 @@ type SocatServer struct {
 	socatTunnels map[uint]socatTunnel // 正在打通的隧道进程
 	ctx          context.Context
 	cancel       context.CancelFunc
+	out          io.Writer
+	err          io.Writer
 }
 
 func NewSocatServer(b, e uint) *SocatServer {
@@ -28,6 +33,8 @@ func NewSocatServer(b, e uint) *SocatServer {
 	SocatServer.portBegin = b
 	SocatServer.portEnd = e
 	SocatServer.socatTunnels = make(map[uint]socatTunnel)
+	SocatServer.out = &logOutFilter{}
+	SocatServer.err = &logErrFilter{}
 	return SocatServer
 }
 
@@ -60,9 +67,10 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 	// cmdStr := "tcp-l:%d,reuseaddr,bind=0.0.0.0,fork tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
 	c1 := "tcp-l:%d,reuseaddr,bind=0.0.0.0,fork"
 	c2 := "tcp-l:%d,reuseaddr,bind=0.0.0.0,retry=10"
-	shellCmd := exec.CommandContext(ctx, "socat", fmt.Sprintf(c1, Port), fmt.Sprintf(c2, Port))
-	shellCmd.Stdout = os.Stdout
-	shellCmd.Stderr = os.Stderr
+	shellCmd := exec.CommandContext(ctx, "socat", "-d", "-d", "-d",
+		fmt.Sprintf(c1, Port), fmt.Sprintf(c2, Port+1))
+	shellCmd.Stdout = server.out
+	shellCmd.Stderr = server.err
 	server.socatTunnels[Port] = socatTunnel{
 		ctx:      ctx,
 		cancel:   cancel,
@@ -71,10 +79,13 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 	if err := server.socatTunnels[Port].shellCmd.Start(); err != nil {
 		return 0, err
 	}
+	log.Println("Start:", server.socatTunnels[Port].shellCmd.String())
 	go func(cmd *exec.Cmd) {
 		cmd.Process.Wait() // blocked until exited
 	}(server.socatTunnels[Port].shellCmd)
-	return (Port), nil
+	// Port + 1 表示一对端口的第二个作为桥接端口用
+	// 客户端最终连接的是这个桥接端口
+	return (Port + 1), nil
 }
 
 /*
@@ -83,12 +94,16 @@ func (server *SocatServer) StartTunnel(ctx context.Context, cancel context.Cance
 *
  */
 func (server *SocatServer) StopTunnel(port uint) error {
-	if server.socatTunnels[port].shellCmd != nil {
-		server.socatTunnels[port].shellCmd.Process.Kill()
+	// port - 1 : 表示服务端口
+	ListenPort := port - 1
+	if server.socatTunnels[ListenPort].shellCmd != nil {
+		server.socatTunnels[ListenPort].shellCmd.Process.Kill()
+		server.socatTunnels[ListenPort].shellCmd.Process.Signal(os.Kill)
 		server.cancel()
 		for i, v := range server.PortPool {
 			if v == port {
 				server.PortPool[i] = 0
+				break
 			}
 		}
 		delete(server.socatTunnels, port)
@@ -105,4 +120,13 @@ func (server *SocatServer) StopTunnel(port uint) error {
  */
 func (server *SocatServer) AllTunnel() map[uint]socatTunnel {
 	return server.socatTunnels
+}
+
+/*
+*
+* 获取当前通道的状态
+*
+ */
+func (server *SocatServer) State() {
+
 }
